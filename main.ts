@@ -2,6 +2,8 @@ import { Database } from "@db/sqlite";
 import { load } from "@std/dotenv";
 
 await load({ envPath: ".env.local", export: true });
+await load({ envPath: ".env", export: true });
+
 const API_TOKEN = Deno.env.get("API_TOKEN");
 if (!API_TOKEN) throw new Error("API_TOKEN environment variable is required");
 
@@ -70,51 +72,63 @@ const oaiError = (error: OpenAIError): Response => {
   );
 };
 
-export default {
-  async fetch(request: Request, _info: Deno.ServeHandlerInfo<Deno.Addr>): Promise<Response> {
-    if (request.headers.get("authorization") !== `Bearer ${API_TOKEN}`) {
-      return oaiError({
-        status: 401,
-        message: "Invalid authentication credentials",
-        type: "invalid_request_error",
-        code: "invalid_api_key",
-      });
-    }
-
-    const key = getLeastRecentlyUsedKey();
-
-    const now = Date.now();
-    const lastUsed = getLastUsed(key.id);
-    const timeSinceLastUse = now - lastUsed;
-    if (timeSinceLastUse < RATE_LIMIT_MS) {
-      return oaiError({
-        status: 429,
-        message: "Rate limit reached for requests. All API keys have been used too recently.",
-        type: "requests",
-        code: "rate_limit_exceeded",
-        headers: {
-          "retry-after": Math.ceil((RATE_LIMIT_MS - timeSinceLastUse) / 1000).toString(),
-        },
-      });
-    }
-
-    updateLastUsed(key.id, now);
-
-    const url = new URL(request.url);
-    const targetUrl = `${key.baseUrl}${url.pathname}${url.search}`;
-
-    const headers = new Headers(request.headers);
-    headers.set("authorization", `Bearer ${key.key}`);
-    headers.delete("host");
-
-    const body = await request.blob();
-    const forwardedRequest = new Request(targetUrl, {
-      method: request.method,
-      headers: headers,
-      body,
+const handler = async (
+  request: Request,
+  _info: Deno.ServeHandlerInfo<Deno.Addr>,
+): Promise<Response> => {
+  if (request.headers.get("authorization") !== `Bearer ${API_TOKEN}`) {
+    return oaiError({
+      status: 401,
+      message: "Invalid authentication credentials",
+      type: "invalid_request_error",
+      code: "invalid_api_key",
     });
+  }
 
-    const response = await fetch(forwardedRequest);
-    return response;
-  },
+  const key = getLeastRecentlyUsedKey();
+
+  const now = Date.now();
+  const lastUsed = getLastUsed(key.id);
+  const timeSinceLastUse = now - lastUsed;
+  if (timeSinceLastUse < RATE_LIMIT_MS) {
+    return oaiError({
+      status: 429,
+      message: "Rate limit reached for requests. All API keys have been used too recently.",
+      type: "requests",
+      code: "rate_limit_exceeded",
+      headers: {
+        "retry-after": Math.ceil((RATE_LIMIT_MS - timeSinceLastUse) / 1000).toString(),
+      },
+    });
+  }
+
+  updateLastUsed(key.id, now);
+
+  const url = new URL(request.url);
+  const targetUrl = `${key.baseUrl}${url.pathname}${url.search}`;
+
+  const headers = new Headers(request.headers);
+  headers.set("authorization", `Bearer ${key.key}`);
+  headers.delete("host");
+
+  const body = await request.blob();
+  const forwardedRequest = new Request(targetUrl, {
+    method: request.method,
+    headers: headers,
+    body,
+  });
+
+  const response = await fetch(forwardedRequest);
+  return response;
+};
+
+export default {
+  fetch: handler,
 } satisfies Deno.ServeDefaultExport;
+
+if (import.meta.main) {
+  const BIND_PATH = Deno.env.get("BIND_PATH");
+  if (BIND_PATH === undefined) throw new Error("BIND_PATH environment variable is required");
+  const server = Deno.serve({ path: BIND_PATH }, handler);
+  await server.finished;
+}
