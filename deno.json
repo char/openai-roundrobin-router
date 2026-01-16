@@ -1,0 +1,9 @@
+{
+  "tasks": {
+    "start": "deno serve --port 3233 -A main.ts"
+  },
+  "imports": {
+    "@db/sqlite": "jsr:@db/sqlite@^0.13.0",
+    "@std/dotenv": "jsr:@std/dotenv@^0.225.6"
+  }
+}
