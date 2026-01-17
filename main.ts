@@ -129,6 +129,14 @@ const handler = async (
   });
 
   console.log(forwardedRequest);
+  console.log(
+    Deno.inspect(JSON.parse(await body.text()), {
+      breakLength: Infinity,
+      colors: true,
+      compact: true,
+      depth: Infinity,
+    }),
+  );
 
   const response = await fetch(forwardedRequest);
   return response;
