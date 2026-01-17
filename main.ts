@@ -110,6 +110,16 @@ const handler = async (
   const headers = new Headers(request.headers);
   headers.set("authorization", `Bearer ${key.key}`);
   headers.delete("host");
+  for (const h of [
+    "x-forwarded-for",
+    "x-forwarded-host",
+    "x-forwarded-proto",
+    "x-forwarded-server",
+    "x-real-ip",
+    "x-scheme",
+  ]) {
+    headers.delete(h);
+  }
 
   const body = await request.blob();
   const forwardedRequest = new Request(targetUrl, {
@@ -117,6 +127,8 @@ const handler = async (
     headers: headers,
     body,
   });
+
+  console.log(forwardedRequest);
 
   const response = await fetch(forwardedRequest);
   return response;
