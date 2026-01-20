@@ -109,8 +109,8 @@ const handler = async (
 
   const headers = new Headers(request.headers);
   headers.set("authorization", `Bearer ${key.key}`);
-  headers.delete("host");
   for (const h of [
+    "host",
     "x-forwarded-for",
     "x-forwarded-host",
     "x-forwarded-proto",
@@ -128,15 +128,15 @@ const handler = async (
     body,
   });
 
-  console.log(forwardedRequest);
-  console.log(
-    Deno.inspect(JSON.parse(await body.text()), {
-      breakLength: Infinity,
-      colors: true,
-      compact: true,
-      depth: Infinity,
-    }),
-  );
+  // console.log(forwardedRequest);
+  // console.log(
+  //   Deno.inspect(JSON.parse(await body.text()), {
+  //     breakLength: Infinity,
+  //     colors: true,
+  //     compact: true,
+  //     depth: Infinity,
+  //   }),
+  // );
 
   const response = await fetch(forwardedRequest);
   return response;
