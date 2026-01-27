@@ -10,30 +10,32 @@ if (!API_TOKEN) throw new Error("API_TOKEN environment variable is required");
 const RATE_LIMIT_MS = 6000; // (six seven voice) six seconds!!
 
 const db = new Database("data/data.db");
-db.exec(`create table if not exists keys (
-  id INTEGER NOT NULL PRIMARY KEY,
-  base_url TEXT NOT NULL,
-  key TEXT NOT NULL,
-  last_used INTEGER DEFAULT 0
-) strict`);
 
 type Key = {
   readonly id: number;
   readonly baseUrl: string;
   readonly key: string;
+  readonly pool: string;
 };
+
+db.exec(`create table if not exists keys (
+  id INTEGER NOT NULL PRIMARY KEY,
+  base_url TEXT NOT NULL,
+  key TEXT NOT NULL,
+  pool TEXT NOT NULL,
+  last_used INTEGER DEFAULT 0
+) strict`);
 
 const stmtGetLeastRecentlyUsedKey = db.prepare(
-  `SELECT id, base_url as baseUrl, key FROM keys ORDER BY last_used ASC LIMIT 1`,
+  `SELECT id, base_url as baseUrl, key, pool FROM keys WHERE pool = ? ORDER BY last_used ASC LIMIT 1`,
 );
+const getLeastRecentlyUsedKey = (pool: string): Key | undefined => {
+  const row = stmtGetLeastRecentlyUsedKey.get<Key>(pool);
+  return row ?? undefined;
+};
+
 const stmtUpdateLastUsed = db.prepare(`UPDATE keys SET last_used = ? WHERE id = ?`);
 const stmtGetLastUsed = db.prepare(`SELECT last_used FROM keys WHERE id = ?`);
-
-const getLeastRecentlyUsedKey = (): Key => {
-  const row = stmtGetLeastRecentlyUsedKey.get<Key>();
-  if (!row) throw new Error("No API keys available in database");
-  return row;
-};
 
 const updateLastUsed = (keyId: number, now: number): void => {
   stmtUpdateLastUsed.run(now, keyId);
@@ -76,7 +78,10 @@ const handler = async (
   request: Request,
   _info: Deno.ServeHandlerInfo<Deno.Addr>,
 ): Promise<Response> => {
-  if (request.headers.get("authorization") !== `Bearer ${API_TOKEN}`) {
+  const authz = request.headers.get("authorization") ?? "";
+  const apiToken = authz.startsWith("Bearer ") ? authz.substring("Bearer ".length) : undefined;
+  const key = apiToken ? getLeastRecentlyUsedKey(apiToken) : undefined;
+  if (!key) {
     return oaiError({
       status: 401,
       message: "Invalid authentication credentials",
@@ -85,7 +90,7 @@ const handler = async (
     });
   }
 
-  const key = getLeastRecentlyUsedKey();
+  const url = new URL(request.url);
 
   const now = Date.now();
   const lastUsed = getLastUsed(key.id);
@@ -104,7 +109,6 @@ const handler = async (
 
   updateLastUsed(key.id, now);
 
-  const url = new URL(request.url);
   const targetUrl = `${key.baseUrl}${url.pathname}${url.search}`;
 
   const headers = new Headers(request.headers);
