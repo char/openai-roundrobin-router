@@ -132,17 +132,18 @@ const handler = async (
     body,
   });
 
-  // console.log(forwardedRequest);
-  // console.log(
-  //   Deno.inspect(JSON.parse(await body.text()), {
-  //     breakLength: Infinity,
-  //     colors: true,
-  //     compact: true,
-  //     depth: Infinity,
-  //   }),
-  // );
+  console.log(forwardedRequest);
+  console.log(
+    Deno.inspect(JSON.parse(await body.text()), {
+      breakLength: Infinity,
+      colors: true,
+      compact: true,
+      depth: Infinity,
+    }),
+  );
 
   const response = await fetch(forwardedRequest);
+  console.log(response);
   return response;
 };
 
